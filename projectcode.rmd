@@ -1,0 +1,296 @@
+---
+title: "BF Timeseries"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+library(readr)
+library(tseries)
+library(forecast)
+```
+
+
+```{r}
+exchange <- read.csv("E:/MITA/Bf/project/exchange.csv", header = TRUE)
+summary(exchange)
+```
+
+The currencies are:
+Brazilian Real
+Russian Ruble
+Indian rupees
+Chinese Yuan
+
+```{r}
+head (exchange)
+```
+
+```{r}
+plot(exchange$RUB.USD)
+```
+
+
+Create a time series object
+```{r}
+exchange <- read.csv("E:/MITA/Bf/project/exchange.csv", header = TRUE)
+
+timeseries=ts(exchange[,"RUB.USD"],frequency=12, start=1998)
+exchange$RUB.USD=tsclean(timeseries)
+```
+
+
+Decomposition of time series
+
+It calculate the seasonal component using smoothing and then adjust the original series for seasonality. The result is a seasonality adjusted time series
+```{r}
+count_ts=ts(na.omit(exchange$RUB.USD), frequency=12, start = 1998)
+
+# Making the data into trend,seasonal and reminder
+decomp <- stl(count_ts, s.window = "periodic")
+
+# Seasonally adjusting the data
+deseasonal_ts <- seasadj(decomp)
+plot(decomp)
+
+# Ploting the data with trend
+plot(count_ts, col="gray", main="Exchange rate (Russian Ruble - USD)", ylab="currency value", xlab="Time") 
+
+# 1 is seasonal, 2 is trend and 3 is reminder 
+lines(decomp$time.series[,2],col="red")
+```
+
+```{r}
+plot(count_ts, col="grey", main="Exchange rate (Russian Ruble - USD)", ylab="currency value", xlab="Time") 
+lines(seasadj(decomp),col="red",ylab="Seasonally adjusted")
+```
+
+
+Stationarity test
+
+Augmented Dickey-Fuller test for stationarity/ non-stationarity of data.
+A large p-value(>0.05) suggests that the time serie is non-stationary (Reject H0 hypotesis)
+
+Kwiatkowski-Phillips-Schmidt-Shin test of stationarity. 
+In this case, if p-value are smaller then 5% differencing is required => for KPSS test H0:stationarity; H1:non-stationarity
+
+```{r}
+adf<-adf.test(count_ts, alternative = "stationary")
+kpss<-kpss.test(count_ts)
+adf
+kpss
+```
+
+Autocorrelation is the linear correlation of a signal with itself at two different points in time, ACF (autocorrelation function) is just such correlation as a function of the lag h between two points of time. It correlates with itself through time.
+
+PACF (partial autocorrelation function) is essentially the autocorrelation of a signal with itself at different points in time, with linear dependency with that signal at shorter lags removed, as a function of lag between points of time.
+
+
+augmented Dickey–Fuller test (ADF)
+Null Hypothesis (H0): If failed to be rejected, it suggests the time series has a unit root, meaning it is non-stationary. It has some time dependent structure.
+Alternate Hypothesis (H1): The null hypothesis is rejected; it suggests the time series does not have a unit root, meaning it is stationary. 
+p-value > 0.05: Fail to reject the null hypothesis (H0), the data has a unit root and is non-stationary.
+p-value <= 0.05: Reject the null hypothesis (H0), the data does not have a unit root and is stationary.
+
+Kwiatkowski–Phillips–Schmidt–Shin (KPSS) test
+The null hypothesis (H0) for the test is that the data is stationary.
+The alternate hypothesis (H1) for the test is that the data is not stationary.
+p-value > 0.05: Reject H0
+p-value <= 0.05: Accept H0
+
+
+```{r}
+Acf(count_ts, main='ACF of actual data')
+Pacf(count_ts, main='PACF of actual data')
+```
+
+Results of Adf and Kpss test showed that the time series is not stationarity.
+
+```{r}
+ndiffs(count_ts)
+```
+
+So, The data gets stationary after 2 differences.
+
+
+Differencing the data d = 1;
+```{r}
+# deseasonal_ts <- seasadj(decomp) is seasonaly adjusted data
+ts_d1=diff(deseasonal_ts, differences=1)
+```
+
+```{r}
+#stationary test for d=1
+adfd1<-adf.test(ts_d1, alternative = "stationary")
+adfd1
+```
+
+Even now p > 0.05 suggests that the time serie is non-stationary (Reject H0 hypotesis)
+
+```{r}
+Acf(ts_d1, main='ACF of diff1 data')
+Pacf(ts_d1, main='PACF of diff1 data')
+```
+
+
+Differencing the data d = 2;
+```{r}
+# deseasonal_ts <- seasadj(decomp) is seasonaly adjusted data
+ts_d2=diff(ts_d1, differences=1)
+```
+
+```{r}
+#stationary test for d=2
+adfd2<-adf.test(ts_d2, alternative = "stationary")
+adfd2
+```
+
+Now, p < 0.05 suggests that the time serie is stationary (Accept H0 hypotesis)
+
+```{r}
+Acf(ts_d2, main='ACF of diff2 data')
+Pacf(ts_d2, main='PACF of diff1 data')
+```
+
+After a time series has been stationarized by differencing, the next step in fitting an ARIMA model is to determine whether AR or MA terms are needed to correct any autocorrelation that remains in the differenced series. By looking at the autocorrelation function (ACF) and partial autocorrelation (PACF) plots of the differenced series, you can tentatively identify the numbers of AR and/or MA terms that are needed. ACF plot: it is merely a bar chart of the coefficients of correlation between a time series and lags of itself. The PACF plot is a plot of the partial correlation coefficients between the series and lags of itself.
+
+
+Moving average of 7 for the stationary data
+```{r}
+plot(count_ts, main="Moving Average Method", ylab="currency value", xlab="Time")
+lines(ma(count_ts,7),col="blue")
+lines(ma(count_ts,25), col="green")
+lines(ma(count_ts,59), col="red")
+```
+
+Naive forecasts of seasonally adjusted data
+
+```{r}
+fit <- stl(count_ts, t.window=30, s.window="periodic", robust=TRUE) 
+fit %>% seasadj() %>% naive() %>% 
+# ploting the graph without seasonality 
+autoplot() 
+```
+
+
+```{r}
+library(ggplot2)
+
+#divide the data into training and testing
+train <- deseasonal_ts[1:150]
+test <- deseasonal_ts[150:216]
+
+
+fit1 <- meanf(count_ts,h=67)
+fit2 <- rwf(count_ts,h=67)
+fit3 <- snaive(count_ts,h=67)
+autoplot(window(count_ts, start=1998)) +
+autolayer(fit1, series="Mean", PI=FALSE) +
+autolayer(fit2, series="Naïve", PI=FALSE) +
+autolayer(fit3, series="Seasonal naïve", PI=FALSE) + 
+ylab("currency rates") + xlab("year") +
+ggtitle("Forecasts for currency exchange rate") +
+guides(colour=guide_legend(title="Forecast"))
+
+```
+
+
+```{r}
+
+accuracy(fit1, test)
+accuracy(fit2, test)
+accuracy(fit3, test)
+```
+
+
+```{r}
+## Fit a model by using Holt method and find the fitted values (estimation of original values)
+fc <- holt(count_ts, h=67)
+autoplot(count_ts) +
+autolayer(fc, series="Holt's method", PI=FALSE) +
+ggtitle("Forecasts from Holt's method") + xlab("Time") +
+ylab("Currency Value") + guides(colour=guide_legend(title="Forecast"))
+plot(fitted(fc))
+lines(fitted(fc), col = "blue", type = "o")
+
+fitted(fc)
+fc$model
+
+accuracy(fc,test)
+```
+
+```{r}
+## Fit a model by using Holt-Winters’ method with additive seasonality and find the fitted values (estimation of original values)
+
+fit1 <- hw(count_ts,seasonal="additive")
+fit2 <- hw(count_ts,seasonal="multiplicative")
+autoplot(count_ts) +
+autolayer(fit1, series="HW additive forecasts", PI=FALSE) +
+autolayer(fit2, series="HW multiplicative forecasts", PI=FALSE) +
+xlab("Year") +
+ylab("Currency values") +
+ggtitle("Holt-Winters’ method") +
+guides(colour=guide_legend(title="Forecast"))
+
+fit1$model
+fit2$model
+# since AIC of additive is less. It is good
+```
+
+Fit the ARIMA model.
+
+ARIMA stands for auto-regressive integrated moving average and is specified by these three order parameters: (p, d, q).
+
+AR(p), is referring to the use of past values in the regression equation for the series Y. The auto-regressive parameter p specifies the number of lags used in the model.
+
+I(d) The d represents the degree of differencing
+
+MA(q) component represents the error of the model as a combination of previous error terms. The order q determines the number of terms to include in the model
+
+auto.arima() command choose the best ARIMA model
+
+```{r}
+#fitting the model
+model1<-auto.arima(deseasonal_ts, seasonal = F)
+model1
+```
+
+Evaluate the model for forecast.
+
+we would expect no significant autocorrelations present in the model residuals.
+
+```{r}
+forecast(model1,h = 20)
+```
+
+Lets divide the data and find the accuracy
+
+Take the training set as all the values except the last 10 (test data) and find the accuracy.
+
+```{r}
+#divide the data into training and testing
+train <- deseasonal_ts[1:150]
+test <- deseasonal_ts[150:216]
+```
+
+
+```{r}
+# find the best fit
+fit <- auto.arima(train)
+fit
+```
+
+```{r}
+# fit the model and predict the next 67 values
+testest<- forecast(fit,h = 67)
+plot(testest)
+```
+
+```{r}
+# find the accuracy of fitted and actual
+accuracy(testest,test)
+```
+
+
