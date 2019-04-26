@@ -1,4 +1,4 @@
-# FORECASTING-FOREIGN-EXCHANGE-RATE
+# Forecasting-Foreign-exchange-Rate
 
 In our project we have explored foreign exchange data. We analyse monthly returns for the four major currencies, Brazilian Real (BRL.USD), Russian Ruble (RUB.USD), Indian rupees (INR.USD) and Chinese Yuan (YUAN.USD )
 
